@@ -83,6 +83,7 @@ public class NaverNewsService {
 
         List<NewsItem> items = body.getItems().stream()
                 .map(this::mapToEntity)
+                .filter(this::isNewItem)
                 .collect(Collectors.toList());
 
         items.forEach(result::addItem);
@@ -160,6 +161,18 @@ public class NaverNewsService {
         item.setPubDateRaw(response.getPubDate());
         item.setPubDateDt(parseDate(response.getPubDate()));
         return item;
+    }
+
+    private boolean isNewItem(NewsItem item) {
+        boolean originallinkExists =
+                item.getOriginallink() != null && itemRepository.existsByOriginallink(item.getOriginallink());
+        boolean titleExists = item.getTitle() != null && itemRepository.existsByTitle(item.getTitle());
+        if (originallinkExists || titleExists) {
+            log.info("Skipping duplicate news item with title='{}' and originallink='{}'",
+                    item.getTitle(), item.getOriginallink());
+            return false;
+        }
+        return true;
     }
 
     private LocalDateTime parseDate(String dateString) {
