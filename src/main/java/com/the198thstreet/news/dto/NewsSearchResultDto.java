@@ -3,6 +3,7 @@ package com.the198thstreet.news.dto;
 import com.the198thstreet.news.entity.NewsSearchResult;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,7 +19,7 @@ public class NewsSearchResultDto {
     private Integer displayCount;
     private List<NewsItemDto> items;
 
-    public static NewsSearchResultDto fromEntity(NewsSearchResult result) {
+    public static NewsSearchResultDto fromModel(NewsSearchResult result) {
         return NewsSearchResultDto.builder()
                 .id(result.getId())
                 .lastBuildRaw(result.getLastBuildRaw())
@@ -26,8 +27,10 @@ public class NewsSearchResultDto {
                 .totalCount(result.getTotalCount())
                 .startNo(result.getStartNo())
                 .displayCount(result.getDisplayCount())
-                .items(result.getItems().stream()
-                        .map(NewsItemDto::fromEntity)
+                .items(Optional.ofNullable(result.getItems())
+                        .orElseGet(List::of)
+                        .stream()
+                        .map(NewsItemDto::fromModel)
                         .collect(Collectors.toList()))
                 .build();
     }

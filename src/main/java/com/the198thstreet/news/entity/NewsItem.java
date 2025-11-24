@@ -1,52 +1,41 @@
 package com.the198thstreet.news.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Entity
-@Table(name = "news_item")
+/**
+ * 단일 뉴스 기사를 담는 POJO.
+ * <p>
+ * MyBatis 매핑 시 resultId 컬럼으로 상위 검색 결과를 연결합니다.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
 public class NewsItem {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "news_id")
+    /** 뉴스 기사 PK (news_id). */
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "result_id", nullable = false)
-    @JsonIgnore
-    private NewsSearchResult result;
+    /** 상위 검색 결과 FK (result_id). */
+    private Long resultId;
 
-    @Column(nullable = false, length = 500)
+    /** 기사 제목(HTML 태그 포함 가능). */
     private String title;
 
-    @Column(length = 2048)
+    /** 원문 링크(옵션). */
     private String originallink;
 
-    @Column(nullable = false, length = 2048)
+    /** 네이버 등 최종 링크. */
     private String link;
 
-    @Column(columnDefinition = "TEXT")
+    /** 기사 요약/설명. */
     private String description;
 
-    @Column(name = "pub_date_raw", nullable = false, length = 50)
+    /** pubDate 원본 문자열. */
     private String pubDateRaw;
 
-    @Column(name = "pub_date_dt")
+    /** pubDate 파싱 값(옵션). */
     private LocalDateTime pubDateDt;
 }
