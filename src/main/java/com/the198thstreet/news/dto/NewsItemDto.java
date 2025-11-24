@@ -16,7 +16,7 @@ public class NewsItemDto {
     private String pubDateRaw;
     private LocalDateTime pubDateDt;
 
-    public static NewsItemDto fromEntity(NewsItem item) {
+    public static NewsItemDto fromModel(NewsItem item) {
         return NewsItemDto.builder()
                 .id(item.getId())
                 .title(item.getTitle())

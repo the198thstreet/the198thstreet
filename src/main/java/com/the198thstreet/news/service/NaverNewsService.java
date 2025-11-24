@@ -8,8 +8,7 @@ import com.the198thstreet.news.dto.NewsSearchResultDto;
 import com.the198thstreet.news.dto.NewsSearchResultUpdateRequest;
 import com.the198thstreet.news.entity.NewsItem;
 import com.the198thstreet.news.entity.NewsSearchResult;
-import com.the198thstreet.news.repository.NewsItemRepository;
-import com.the198thstreet.news.repository.NewsSearchResultRepository;
+import com.the198thstreet.news.repository.NewsMapper;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
@@ -39,8 +38,7 @@ public class NaverNewsService {
             DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final RestTemplate restTemplate;
-    private final NewsSearchResultRepository resultRepository;
-    private final NewsItemRepository itemRepository;
+    private final NewsMapper newsMapper;
 
     @Value("${naver.api.client-id}")
     private String clientId;
@@ -53,6 +51,7 @@ public class NaverNewsService {
 
     @Transactional
     public NewsSearchResultDto fetchAndSave(String query, String sort) {
+        // 1) 쿼리 파라미터와 헤더를 깔끔하게 조립
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(newsApiUrl)
                 .queryParam("query", query)
                 .queryParam("sort", sort);
@@ -82,31 +81,36 @@ public class NaverNewsService {
         result.setDisplayCount(body.getDisplay());
 
         List<NewsItem> items = body.getItems().stream()
-                .map(this::mapToEntity)
+                .map(this::mapToModel)
                 .filter(this::isNewItem)
                 .collect(Collectors.toList());
 
-        items.forEach(result::addItem);
-        NewsSearchResult saved = resultRepository.save(result);
-        return NewsSearchResultDto.fromEntity(saved);
+        // 2) 헤더/본문을 단순하게 한 번씩만 insert
+        result.setItems(items);
+        newsMapper.insertResult(result);
+        attachResultId(result);
+        if (!items.isEmpty()) {
+            newsMapper.insertItems(items);
+        }
+        return NewsSearchResultDto.fromModel(result);
     }
 
     @Transactional(readOnly = true)
     public List<NewsSearchResultDto> findAllResults() {
-        return resultRepository.findAll().stream()
-                .map(NewsSearchResultDto::fromEntity)
+        return newsMapper.findAllResultsWithItems().stream()
+                .map(NewsSearchResultDto::fromModel)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public Optional<NewsSearchResultDto> findResult(Long id) {
-        NewsSearchResult result = resultRepository.findWithItemsById(id);
-        return Optional.ofNullable(result).map(NewsSearchResultDto::fromEntity);
+        NewsSearchResult result = newsMapper.findResultWithItems(id);
+        return Optional.ofNullable(result).map(NewsSearchResultDto::fromModel);
     }
 
     @Transactional
     public Optional<NewsSearchResultDto> updateResult(Long id, NewsSearchResultUpdateRequest request) {
-        return resultRepository.findById(id).map(result -> {
+        return Optional.ofNullable(newsMapper.findResultById(id)).map(result -> {
             result.setLastBuildRaw(request.getLastBuildRaw());
             if (request.getLastBuildDt() != null) {
                 result.setLastBuildDt(LocalDateTime.parse(request.getLastBuildDt()));
@@ -120,39 +124,49 @@ public class NaverNewsService {
             if (request.getDisplayCount() != null) {
                 result.setDisplayCount(request.getDisplayCount());
             }
-            return NewsSearchResultDto.fromEntity(result);
+            newsMapper.updateResult(result);
+            return NewsSearchResultDto.fromModel(result);
         });
     }
 
     @Transactional
     public void deleteResult(Long id) {
-        resultRepository.deleteById(id);
+        newsMapper.deleteItemsByResultId(id);
+        newsMapper.deleteResult(id);
     }
 
     @Transactional(readOnly = true)
     public Optional<NewsItemDto> findItem(Long id) {
-        return itemRepository.findById(id).map(NewsItemDto::fromEntity);
+        return Optional.ofNullable(newsMapper.findItemById(id)).map(NewsItemDto::fromModel);
     }
 
     @Transactional
     public Optional<NewsItemDto> updateItem(Long id, NewsItemUpdateRequest request) {
-        return itemRepository.findById(id).map(item -> {
+        return Optional.ofNullable(newsMapper.findItemById(id)).map(item -> {
             item.setTitle(request.getTitle());
             item.setOriginallink(request.getOriginallink());
             item.setLink(request.getLink());
             item.setDescription(request.getDescription());
             item.setPubDateRaw(request.getPubDateRaw());
             item.setPubDateDt(parseDate(request.getPubDateRaw()));
-            return NewsItemDto.fromEntity(item);
+            newsMapper.updateItem(item);
+            return NewsItemDto.fromModel(item);
         });
     }
 
     @Transactional
     public void deleteItem(Long id) {
-        itemRepository.deleteById(id);
+        newsMapper.deleteItem(id);
     }
 
-    private NewsItem mapToEntity(NaverNewsItemResponse response) {
+    private void attachResultId(NewsSearchResult result) {
+        if (result.getItems() == null) {
+            return;
+        }
+        result.getItems().forEach(item -> item.setResultId(result.getId()));
+    }
+
+    private NewsItem mapToModel(NaverNewsItemResponse response) {
         NewsItem item = new NewsItem();
         item.setTitle(response.getTitle());
         item.setOriginallink(response.getOriginallink());
@@ -165,8 +179,8 @@ public class NaverNewsService {
 
     private boolean isNewItem(NewsItem item) {
         boolean originallinkExists =
-                item.getOriginallink() != null && itemRepository.existsByOriginallink(item.getOriginallink());
-        boolean titleExists = item.getTitle() != null && itemRepository.existsByTitle(item.getTitle());
+                item.getOriginallink() != null && newsMapper.existsByOriginallink(item.getOriginallink());
+        boolean titleExists = item.getTitle() != null && newsMapper.existsByTitle(item.getTitle());
         if (originallinkExists || titleExists) {
             log.info("Skipping duplicate news item with title='{}' and originallink='{}'",
                     item.getTitle(), item.getOriginallink());
