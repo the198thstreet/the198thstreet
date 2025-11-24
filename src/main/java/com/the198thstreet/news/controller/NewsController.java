@@ -1,82 +1,55 @@
 package com.the198thstreet.news.controller;
 
-import com.the198thstreet.news.dto.NewsItemDto;
-import com.the198thstreet.news.dto.NewsItemUpdateRequest;
-import com.the198thstreet.news.dto.NewsSearchResultDto;
-import com.the198thstreet.news.dto.NewsSearchResultUpdateRequest;
-import com.the198thstreet.news.service.NaverNewsService;
-import jakarta.validation.Valid;
-import java.util.List;
+import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 @RequestMapping("/api/news")
 public class NewsController {
 
-    private final NaverNewsService naverNewsService;
+    private final RestTemplate restTemplate;
 
-    public NewsController(NaverNewsService naverNewsService) {
-        this.naverNewsService = naverNewsService;
+    @Value("${naver.api.client-id}")
+    private String clientId;
+
+    @Value("${naver.api.client-secret}")
+    private String clientSecret;
+
+    @Value("${naver.api.news-url}")
+    private String newsApiUrl;
+
+    public NewsController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
     @GetMapping("/searchResult/news/{query}/{sort}")
-    public NewsSearchResultDto fetchAndSave(@PathVariable String query, @PathVariable String sort) {
-        return naverNewsService.fetchAndSave(query, sort);
-    }
+    public Map<String, Object> searchNews(@PathVariable String query, @PathVariable String sort) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(newsApiUrl)
+                .queryParam("query", query)
+                .queryParam("sort", sort);
 
-    @GetMapping("/results")
-    public List<NewsSearchResultDto> findAllResults() {
-        return naverNewsService.findAllResults();
-    }
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-Naver-Client-Id", clientId);
+        headers.add("X-Naver-Client-Secret", clientSecret);
 
-    @GetMapping("/results/{id}")
-    public ResponseEntity<NewsSearchResultDto> findResult(@PathVariable Long id) {
-        return naverNewsService.findResult(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
+        HttpEntity<Void> httpEntity = new HttpEntity<>(headers);
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                builder.toUriString(),
+                HttpMethod.GET,
+                httpEntity,
+                new ParameterizedTypeReference<Map<String, Object>>() {});
 
-    @PutMapping("/results/{id}")
-    public ResponseEntity<NewsSearchResultDto> updateResult(
-            @PathVariable Long id,
-            @Valid @RequestBody NewsSearchResultUpdateRequest request) {
-        return naverNewsService.updateResult(id, request)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/results/{id}")
-    public ResponseEntity<Void> deleteResult(@PathVariable Long id) {
-        naverNewsService.deleteResult(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/items/{id}")
-    public ResponseEntity<NewsItemDto> findItem(@PathVariable Long id) {
-        return naverNewsService.findItem(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @PutMapping("/items/{id}")
-    public ResponseEntity<NewsItemDto> updateItem(
-            @PathVariable Long id,
-            @Valid @RequestBody NewsItemUpdateRequest request) {
-        return naverNewsService.updateItem(id, request)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/items/{id}")
-    public ResponseEntity<Void> deleteItem(@PathVariable Long id) {
-        naverNewsService.deleteItem(id);
-        return ResponseEntity.noContent().build();
+        return response.getBody();
     }
 }
