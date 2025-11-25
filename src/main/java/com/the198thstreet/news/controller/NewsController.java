@@ -27,20 +27,32 @@ public class NewsController {
     /**
      * 검색어와 정렬 조건에 따라 뉴스 목록을 반환한다.
      *
-     * @param query 검색어 (필수)
-     * @param sort  정렬 방식(sim: 유사도, date: 날짜). 기본값은 sim
+     * @param query   검색어 (필수)
+     * @param sort    정렬 방식(sim: 유사도, date: 날짜). 기본값은 sim
+     * @param display 한 번에 받을 건수(1~100). 미입력 시 네이버 기본값 10을 따름
+     * @param start   몇 번째 결과부터 가져올지(1~1000). 미입력 시 1부터 시작
      * @return 뉴스 검색 결과 레코드
      */
     @GetMapping
     public NewsSearchResponse listNews(
             @RequestParam(name = "query") String query,
-            @RequestParam(name = "sort", defaultValue = "sim") String sort) {
+            @RequestParam(name = "sort", defaultValue = "sim") String sort,
+            @RequestParam(name = "display", required = false) Integer display,
+            @RequestParam(name = "start", required = false) Integer start) {
 
         // 빈 검색어에 대해서는 즉시 400 에러를 반환해 불필요한 외부 호출을 방지한다.
         if (query == null || query.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "검색어를 입력해 주세요.");
         }
 
-        return newsService.fetchNews(query, sort);
+        // 네이버 API 스펙에 맞춰 display(1~100), start(1~1000) 범위를 선검증한다.
+        if (display != null && (display < 1 || display > 100)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "display 값은 1~100 사이여야 합니다.");
+        }
+        if (start != null && (start < 1 || start > 1000)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "start 값은 1~1000 사이여야 합니다.");
+        }
+
+        return newsService.fetchNews(query, sort, display, start);
     }
 }
