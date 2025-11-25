@@ -1,7 +1,7 @@
 package com.the198thstreet.news.controller;
 
-import com.the198thstreet.news.model.NewsSearchResponse;
 import com.the198thstreet.news.service.NewsService;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,7 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * 뉴스 검색 API 엔드포인트를 노출하는 REST 컨트롤러.
  * <p>
- * 입력값 검증 후 서비스 계층에 위임하며, 별도의 DTO 없이 {@link NewsSearchResponse} 레코드를 그대로 반환한다.
+ * 입력값 검증 후 서비스 계층에 위임하며, 별도의 DTO 대신 Map을 그대로 반환한다.
  */
 @RestController
 @RequestMapping("/api/news")
@@ -31,10 +31,10 @@ public class NewsController {
      * @param sort    정렬 방식(sim: 유사도, date: 날짜). 기본값은 sim
      * @param display 한 번에 받을 건수(1~100). 미입력 시 네이버 기본값 10을 따름
      * @param start   몇 번째 결과부터 가져올지(1~1000). 미입력 시 1부터 시작
-     * @return 뉴스 검색 결과 레코드
+     * @return 네이버 API 응답을 그대로 담은 맵
      */
     @GetMapping
-    public NewsSearchResponse listNews(
+    public Map<String, Object> listNews(
             @RequestParam(name = "query") String query,
             @RequestParam(name = "sort", defaultValue = "sim") String sort,
             @RequestParam(name = "display", required = false) Integer display,

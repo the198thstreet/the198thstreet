@@ -1,14 +1,13 @@
 package com.the198thstreet.news.service;
 
-import com.the198thstreet.news.mapper.NewsResponseMapper;
-import com.the198thstreet.news.model.NewsItem;
-import com.the198thstreet.news.model.NewsSearchResponse;
-import com.the198thstreet.news.model.NaverNewsResponse;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -18,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-import org.mybatis.spring.SqlSessionTemplate;
 
 /**
  * 네이버 뉴스 검색 API 호출과 응답 변환을 담당하는 서비스.
@@ -54,7 +52,7 @@ public class NewsService {
      * @param start   몇 번째 결과부터 가져올지(1~1000). 비어 있으면 네이버 기본값을 따름
      * @return 클라이언트에 바로 전달 가능한 뉴스 검색 응답
      */
-    public NewsSearchResponse fetchNews(String query, String sort, Integer display, Integer start) {
+    public Map<String, Object> fetchNews(String query, String sort, Integer display, Integer start) {
         // 정렬 파라미터가 비어 있으면 기본값인 sim(유사도 순)으로 고정한다.
         String normalizedSort = sort == null || sort.isBlank() ? "sim" : sort;
         int normalizedDisplay = display == null ? 10 : display;
@@ -78,17 +76,16 @@ public class NewsService {
 
         // 바디는 필요 없으므로 HttpEntity<Void> 로 헤더만 실어 보낸다.
         HttpEntity<Void> httpEntity = new HttpEntity<>(headers);
-        ResponseEntity<NaverNewsResponse> response = restTemplate.exchange(
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 requestUri,
                 HttpMethod.GET,
                 httpEntity,
                 new ParameterizedTypeReference<>() {});
 
-        // 외부 응답을 내부 응답 모델로 변환한다.
-        NewsSearchResponse mappedResponse = NewsResponseMapper.toNewsSearchResponse(response.getBody());
+        Map<String, Object> mappedResponse = normalizeResponse(response.getBody());
 
         // 네이버 API가 반환한 아이템 중 제목이 중복되지 않는 건만 DB에 적재한다.
-        persistNewsItems(mappedResponse.items(), query, normalizedSort, normalizedDisplay, normalizedStart);
+        persistNewsItems(mappedResponse, query, normalizedSort, normalizedDisplay, normalizedStart);
 
         return mappedResponse;
     }
@@ -100,21 +97,31 @@ public class NewsService {
      * - 제목이 이미 존재하는 경우 INSERT를 수행하지 않아 중복 레코드를 방지한다.<br>
      * - 별도의 자바 매퍼 인터페이스 없이 가장 단순한 방식으로 쿼리를 실행한다.
      *
-     * @param newsItems 변환된 뉴스 아이템 목록
+     * @param response  외부 API 응답 맵
      * @param query     검색어(저장 메타데이터)
      * @param sort      정렬 방식(저장 메타데이터)
      * @param display   한 번에 요청한 건수
      * @param start     시작 위치
      */
-    private void persistNewsItems(List<NewsItem> newsItems, String query, String sort, int display, int start) {
-        if (newsItems == null || newsItems.isEmpty()) {
+    private void persistNewsItems(Map<String, Object> response, String query, String sort, int display, int start) {
+        Object itemsObj = response.get("items");
+        if (!(itemsObj instanceof List<?> rawItems) || rawItems.isEmpty()) {
             // 저장할 데이터가 없다면 조용히 종료한다.
             return;
         }
 
-        for (NewsItem item : newsItems) {
+        for (Object itemObj : rawItems) {
+            if (!(itemObj instanceof Map<?, ?> item)) {
+                continue;
+            }
+
+            String title = asString(item.get("title"));
+            if (title.isEmpty()) {
+                continue;
+            }
+
             // 1) 제목이 이미 저장되어 있는지 카운트 쿼리로 확인한다.
-            int existingCount = sqlSessionTemplate.selectOne("NewsMapper.countByTitle", item.title());
+            int existingCount = sqlSessionTemplate.selectOne("NewsMapper.countByTitle", title);
             if (existingCount > 0) {
                 // 동일한 제목이 있으면 다음 아이템으로 건너뛴다.
                 continue;
@@ -122,11 +129,11 @@ public class NewsService {
 
             // 2) 삽입에 필요한 필드를 맵으로 조립한다.
             Map<String, Object> params = new HashMap<>();
-            params.put("title", item.title());
-            params.put("originallink", item.originallink());
-            params.put("link", item.link());
-            params.put("description", item.description());
-            params.put("pubDate", item.pubDate());
+            params.put("title", title);
+            params.put("originallink", asString(item.get("originallink")));
+            params.put("link", asString(item.get("link")));
+            params.put("description", asString(item.get("description")));
+            params.put("pubDate", asString(item.get("pubDate")));
             params.put("query", query);
             params.put("sort", sort);
             params.put("display", display);
@@ -134,6 +141,56 @@ public class NewsService {
 
             // 3) XML 매퍼에 정의된 insert 구문을 실행한다.
             sqlSessionTemplate.insert("NewsMapper.insertNewsItem", params);
+        }
+    }
+
+    /**
+     * 외부 API 응답을 Map 기반 구조로 정규화한다.
+     *
+     * @param response 네이버 API 응답 바디
+     * @return lastBuildDate, total, start, display, items 키를 포함한 맵
+     */
+    private Map<String, Object> normalizeResponse(Map<String, Object> response) {
+        Map<String, Object> normalized = new HashMap<>();
+        Map<String, Object> safeResponse = response == null ? Map.of() : response;
+
+        normalized.put("lastBuildDate", asString(safeResponse.get("lastBuildDate")));
+        normalized.put("total", asInt(safeResponse.get("total")));
+        normalized.put("start", asInt(safeResponse.get("start")));
+        normalized.put("display", asInt(safeResponse.get("display")));
+        normalized.put("items", extractItems(safeResponse.get("items")));
+
+        return normalized;
+    }
+
+    private List<Map<String, Object>> extractItems(Object itemsObj) {
+        if (!(itemsObj instanceof List<?> rawItems)) {
+            return List.of();
+        }
+
+        return rawItems.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> ((Map<?, ?>) item).entrySet().stream()
+                        .collect(Collectors.toMap(
+                                entry -> Objects.toString(entry.getKey(), ""),
+                                entry -> entry.getValue(),
+                                (first, second) -> first,
+                                HashMap::new)))
+                .toList();
+    }
+
+    private String asString(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private int asInt(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? 0 : Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 }
