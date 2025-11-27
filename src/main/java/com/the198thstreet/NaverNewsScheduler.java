@@ -26,6 +26,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * 네이버 뉴스 검색 OpenAPI를 1분마다 호출해 DB에 저장하는 매우 단순한 스케줄러.
@@ -173,6 +174,7 @@ public class NaverNewsScheduler {
          * 네이버 뉴스 검색 API 응답을 Jackson이 매핑할 수 있도록 하는 DTO.
          * <p>필요한 필드만 남기고 매우 단순하게 구성했다.</p>
          */
+        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class NaverNewsResponse {
                 private List<NewsItem> items;
 
@@ -188,6 +190,7 @@ public class NaverNewsScheduler {
         /**
          * 네이버 뉴스 아이템 DTO. 카멜케이스와 스네이크 케이스가 자동 매핑되도록 필드명을 API 응답과 동일하게 맞춘다.
          */
+        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class NewsItem {
                 private String title;
                 private String originallink;
