@@ -2,6 +2,7 @@ package com.the198thstreet;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 스프링 부트 애플리케이션의 진입점.
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 내장 톰캣을 띄워 REST API 서버를 실행한다.
  */
 @SpringBootApplication
+@EnableScheduling // 스케줄러 활성화
 public class The198thstreetApplication {
 
         /**
