@@ -6,6 +6,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -70,6 +72,7 @@ public class NaverNewsScheduler {
          */
         @Scheduled(fixedRate = 60_000)
         public void callNaverNewsApi() {
+                Instant startTime = Instant.now();
                 int index = startIndex.getAndUpdate(i -> (i + 1) % START_POSITIONS.size());
                 int start = START_POSITIONS.get(index);
 
@@ -84,6 +87,8 @@ public class NaverNewsScheduler {
                 HttpHeaders headers = new HttpHeaders();
                 headers.add("X-Naver-Client-Id", clientId);
                 headers.add("X-Naver-Client-Secret", clientSecret);
+
+                log.info("[뉴스 스케줄러 시작] start={} query={} display={} sort={}", start, FIXED_QUERY, FIXED_DISPLAY, FIXED_SORT);
 
                 try {
                         // REST 호출 수행
@@ -105,8 +110,17 @@ public class NaverNewsScheduler {
                                 return;
                         }
 
+                        AtomicInteger insertCount = new AtomicInteger(0);
+
                         // 받은 기사들을 DB에 하나씩 저장한다.
-                        body.getItems().forEach(this::saveIfNewArticle);
+                        body.getItems().forEach(item -> {
+                                if (saveIfNewArticle(item)) {
+                                        insertCount.incrementAndGet();
+                                }
+                        });
+
+                        long elapsedMillis = Duration.between(startTime, Instant.now()).toMillis();
+                        log.info("[뉴스 스케줄러 완료] start={} 저장={}건 소요={}ms", start, insertCount.get(), elapsedMillis);
                 } catch (RestClientException restClientException) {
                         // 외부 API 요청 자체가 실패한 경우 경고 로그만 남긴다.
                         log.warn("네이버 뉴스 API 호출 도중 예외 발생 - start: {} message: {}", start, restClientException.getMessage());
@@ -120,9 +134,9 @@ public class NaverNewsScheduler {
          * 중복 여부를 간단히 검사한 뒤, 새로운 기사만 DB에 INSERT한다.
          * @param item 네이버 뉴스 응답 아이템
          */
-        private void saveIfNewArticle(NewsItem item) {
+        private boolean saveIfNewArticle(NewsItem item) {
                 if (item == null) {
-                        return;
+                        return false;
                 }
 
                 // 이미 저장된 링크/원본링크와 겹치는지 검사
@@ -135,7 +149,7 @@ public class NaverNewsScheduler {
                 if (duplicateCount != null && duplicateCount > 0) {
                         // 겹치면 삽입하지 않는다.
                         log.debug("중복 기사 스킵 - title: {}", item.getTitle());
-                        return;
+                        return false;
                 }
 
                 // pubDate 문자열을 DATETIME으로 변환한다. 실패하면 null을 그대로 넣는다.
@@ -148,6 +162,9 @@ public class NaverNewsScheduler {
                                 item.getLink(),
                                 item.getDescription(),
                                 pubDateTimestamp);
+
+                log.debug("신규 기사 저장 완료 - title: {} pubDate: {}", item.getTitle(), pubDateTimestamp);
+                return true;
         }
 
         /**
