@@ -1,6 +1,8 @@
 package com.the198thstreet.config;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +26,10 @@ public class RestClientConfig {
      */
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        RestTemplate restTemplate = builder.build();
+        RestTemplate restTemplate = builder
+                .setConnectTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(10))
+                .build();
 
         // 기본 StringHttpMessageConverter 를 제거하고 UTF-8 컨버터를 맨 앞에 추가한다.
         restTemplate.getMessageConverters().removeIf(converter -> converter instanceof StringHttpMessageConverter);
