@@ -10,10 +10,10 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * 외부 API 통신에 사용할 {@link RestTemplate} 설정을 정의한다.
+ * REST 호출을 테스트하거나 향후 외부 API를 붙일 때 사용할 {@link RestTemplate} 설정.
  * <p>
- * 네이버 뉴스 API는 UTF-8 응답을 반환하므로, 문자열 컨버터를 UTF-8 우선으로 교체한다.
- * 기본 컨버터를 제거하지 않으면 환경에 따라 잘못된 인코딩이 적용될 수 있어 명시적으로 교체한다.
+ * 현재 애플리케이션은 메모리 Map 기반으로 동작하지만,
+ * 학습/확장 목적을 위해 UTF-8 컨버터가 적용된 안전한 클라이언트를 미리 제공한다.
  */
 @Configuration
 public class RestClientConfig {

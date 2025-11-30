@@ -1,64 +1,56 @@
-# 코드 구성 및 동작 흐름
+# 코드 흐름 총정리 (완전 초보용)
 
-스케줄러 중심의 간단한 구조로, 복잡한 계층 없이 `RestTemplate` + `JdbcTemplate` 만 사용합니다. 로그를 자세히 남겨 **“지금 무엇을 하고 있는지”**를 눈으로 확인할 수 있게 했습니다.
+> **목표**: 네이버 뉴스나 DB 없이, 메모리 `Map` 만으로 동작하는 초간단 스케줄러가 어떻게 돌아가는지 눈으로 따라가기.
 
-## 주요 파일
-- `src/main/java/com/the198thstreet/The198thstreetApplication.java`
-  - 스케줄러를 활성화(`@EnableScheduling`)한 Spring Boot 진입점입니다.
-- `src/main/java/com/the198thstreet/config/RestClientConfig.java`
-  - UTF-8 문자열 컨버터를 우선 적용한 `RestTemplate` 빈을 제공합니다.
-- `src/main/java/com/the198thstreet/NaverNewsScheduler.java`
-  - 1분마다 네이버 뉴스 API를 호출하고, 받은 아이템을 DB에 적재하는 전체 로직이 들어 있습니다.
+---
+
+## 1. 실행 준비
+- **필수 조건 없음**: 외부 API 키, 데이터베이스 서버 모두 필요 없습니다.
+- **실행 명령**: 터미널에서 아래 한 줄이면 끝입니다.
+  ```bash
+  ./mvnw spring-boot:run
+  ```
+- **왜 이렇게 간단한가?**
+  - 애플리케이션이 내부에서 **샘플 기사 데이터**를 만들고 메모리에 넣기 때문입니다.
+  - 실패 지점이 없어 "실행 → 로그 확인"만으로 전체 흐름을 익힐 수 있습니다.
+
+## 2. 주요 파일과 하는 일
+- `src/main/java/com/the198thstreet/SimpleNewsScheduler.java`
+  - 스케줄러가 1분마다 실행되며, 샘플 기사를 `Map<Integer, Map<String, String>>` 형태로 메모리에 채웁니다.
+  - 네이버/구글 API, 엔티티, 리포지토리, DB 연결 **모두 제거**.
+- `src/main/resources/application.properties`
+  - `news.collector.memory.enabled` : 스케줄러 켤지/끌지 선택.
+  - `news.collector.memory.fixed-rate-ms` : 몇 ms마다 실행할지 설정.
 - `src/main/resources/schema.sql`
-  - `news_articles` 테이블을 생성하는 DDL입니다.
-- `src/main/resources/application.properties`
-  - 네이버 API 인증 키, 데이터소스, 로그 레벨을 외부화한 프로퍼티 파일입니다.
+  - 현재 버전에서는 DB가 필요 없음을 설명하는 주석만 남겨둔 상태입니다.
 
-## 스케줄러가 자동 실행되는 원리
+## 3. 스케줄러가 자동으로 돈다고?
+- `The198thstreetApplication` 클래스에 `@EnableScheduling`이 달려 있어서, 스프링이 부팅될 때 스케줄러를 자동 등록합니다.
+- 등록된 메서드: `SimpleNewsScheduler#refreshNewsCache`
+  - `@Scheduled(fixedRateString = "${news.collector.memory.fixed-rate-ms:60000}")`
+  - `application.properties` 값을 읽어서 주기를 결정합니다. 값을 바꾸면 **다음 실행부터 바로 반영**됩니다.
 
-```mermaid
-flowchart TD
-    A[애플리케이션 시작 (main 메서드)] --> B[@SpringBootApplication 자동 설정]
-    B --> C[@EnableScheduling]
-    C --> D[ScheduledAnnotationBeanPostProcessor
-스프링이 자동 등록하는 후처리기]
-    D --> E[@Component 빈 스캔
-NaverNewsScheduler 발견]
-    E --> F[@Scheduled 메서드 등록
-기본 TaskScheduler 사용]
-    F --> G[주기적으로 callNaverNewsApi 실행]
-```
+## 4. 한 사이클의 내부 흐름 (로그를 따라가기)
+1. **시작 로그** : `[메모리 뉴스 스케줄러 시작] 실행번호=… 주기=…ms`
+2. `buildSampleHeadlines`가 호출되어 기사 3개를 만듭니다.
+   - 각 기사는 `title`, `summary`, `source`, `collectedAt`, `executionNo` 키를 가진 `Map<String, String>` 입니다.
+3. `inMemoryNews`를 `clear()` 해서 이전 실행 데이터를 싹 비웁니다.
+4. 새 기사 Map 을 순번(1,2,3)에 맞춰 `ConcurrentHashMap`에 넣습니다.
+   - DEBUG 로그로 `[기사 저장] 순번=… 내용=…` 이 찍힙니다.
+5. **완료 로그** : `[메모리 뉴스 스케줄러 완료] 실행번호=… 저장된 건수=3 소요시간=…ms`
 
-- `@EnableScheduling`을 붙이면 스프링이 `ScheduledAnnotationBeanPostProcessor`를 자동 등록합니다.
-- 이 후처리기가 모든 빈을 살펴 `@Scheduled`가 붙은 메서드를 찾아 **스케줄 테이블**에 등록합니다.
-- 기본 `TaskScheduler`(스레드 풀 1개)가 주기적으로 메서드를 호출하므로, 애플리케이션을 켜기만 해도 스케줄러가 자동으로 동작합니다.
+## 5. 데이터를 어떻게 확인하나요?
+- 현재는 콘솔 로그로만 흐름을 확인하도록 구성했습니다.
+- `SimpleNewsScheduler#getCurrentNewsSnapshot()`을 호출하면, 스케줄러가 메모리에 들고 있는 Map을 **복사본**으로 돌려받을 수 있습니다.
+  - 나중에 REST API나 테스트 코드에서 쉽게 재사용할 수 있도록 분리했습니다.
 
-## 실행 흐름 (로그와 함께 따라가기)
-1. 애플리케이션 기동 → `RestClientConfig`가 `RestTemplate`를 만들고, 스케줄러가 등록됩니다.
-2. **1분마다** 스케줄러가 시작될 때 INFO 로그가 찍힙니다. (`[뉴스 스케줄러 시작] ...`)
-3. 고정 파라미터(`query=속보`, `sort=sim`, `display=100`)와 `start` 값(`1, 11, …, 91` 순환)을 조합해 요청 URL을 만듭니다.
-4. 응답 JSON을 DTO(`NaverNewsResponse`, `NewsItem`)로 매핑하고, 목록이 비어 있으면 WARN 로그만 남기고 종료합니다.
-5. 각 기사에 대해 `(link OR originallink)`가 DB에 이미 있는지 `JdbcTemplate`으로 검사합니다.
-   - 중복이면 DEBUG 로그: `중복 기사 스킵 - title: ...`
-   - 신규이면 INSERT 후 DEBUG 로그: `신규 기사 저장 완료 - title: ...`
-6. 한 번의 실행이 끝나면 INFO 로그로 저장 건수와 소요 시간을 출력합니다. (`[뉴스 스케줄러 완료] ...`)
+## 6. 자주 묻는 질문 (FAQ)
+- **Q. 왜 Map을 썼나요?**
+  - 목적은 "가장 단순한 데이터 흐름"을 보여주는 것입니다. 엔티티/DTO를 모르더라도 key-value 구조만 알면 전부 이해할 수 있습니다.
+- **Q. DB나 외부 API를 붙이고 싶다면?**
+  - 스케줄러 안의 `buildSampleHeadlines` 부분을 원하는 데이터로 교체하고, `inMemoryNews` 대신 JPA 리포지토리 등을 주입하면 됩니다. 지금 구조는 의존성이 적어 쉽게 확장할 수 있습니다.
+- **Q. 실행 번호(executionNo)는 왜 넣었나요?**
+  - 스케줄러가 몇 번째로 실행된 결과인지 로그와 데이터에서 한눈에 볼 수 있게 하기 위해서입니다. 문제 상황을 재현하거나 설명할 때 유용합니다.
 
-## 로그 세팅
-- `src/main/resources/application.properties`
-  - `logging.level.com.the198thstreet=DEBUG` : 우리 코드의 상세 로그를 모두 출력
-  - `logging.level.org.springframework.scheduling=INFO` : 스케줄러 동작 상태를 노출
-  - `logging.pattern.console` : 시간·스레드·클래스를 포함한 콘솔 포맷
-
-## DB 스키마 요약
-`schema.sql`은 다음 열을 정의합니다.
-- `id` (PK, AUTO_INCREMENT)
-- `title` (VARCHAR 500)
-- `originallink` / `link` (각각 VARCHAR 1000, UNIQUE)
-- `description` (TEXT)
-- `pub_date` (DATETIME)
-- `reg_date` (DATETIME, 기본값 CURRENT_TIMESTAMP)
-
-## 프로퍼티 키
-- `naver.api.client-id`, `naver.api.client-secret`, `naver.api.news-url`
-- `spring.datasource.*` 로 DB 연결 정보를 주입합니다.
-- `logging.*` 로 로그 레벨과 콘솔 포맷을 제어합니다.
+---
+이 문서 하나만 읽고도 "애플리케이션이 켜지면 스케줄러가 1분마다 메모리 Map을 갱신한다"는 흐름을 완전히 이해할 수 있습니다.
