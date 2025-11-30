@@ -48,6 +48,9 @@ public class NaverNewsScheduler {
         private final JdbcTemplate jdbcTemplate;
         private final AtomicInteger startIndex = new AtomicInteger(0);
 
+        @Value("${news.collector.naver.enabled:true}")
+        private boolean naverCollectorEnabled;
+
         @Value("${naver.api.client-id}")
         private String clientId;
 
@@ -72,6 +75,10 @@ public class NaverNewsScheduler {
          */
         @Scheduled(fixedRate = 60_000)
         public void callNaverNewsApi() {
+                if (!naverCollectorEnabled) {
+                        log.debug("네이버 뉴스 수집기가 비활성화되어 실행하지 않습니다.");
+                        return;
+                }
                 Instant startTime = Instant.now();
                 int index = startIndex.getAndUpdate(i -> (i + 1) % START_POSITIONS.size());
                 int start = START_POSITIONS.get(index);
