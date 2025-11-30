@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>그날 무슨 일이?</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYp4CkJPe3aKa5YfRS2XkLrO3I1I4td5qL2p3uBM=" crossorigin="anonymous"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+            background: #f7f9fb;
+            color: #1f2933;
+        }
+
+        header {
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            color: #fff;
+            padding: 32px 24px 24px 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: 800;
+            margin: 0 0 8px 0;
+        }
+
+        .subtitle {
+            margin: 0;
+            opacity: 0.9;
+        }
+
+        .controls {
+            margin-top: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .controls button {
+            background: #ffffff;
+            border: none;
+            color: #4338ca;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls button:hover {
+            background: #eef2ff;
+        }
+
+        .controls input[type="date"] {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e0;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 10px 24px rgba(17, 24, 39, 0.08);
+            border: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 600;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #111827;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        .card-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .card-title a:hover {
+            text-decoration: underline;
+        }
+
+        .card-footer {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 12px;
+            color: #6366f1;
+            font-weight: 700;
+        }
+
+        .badge {
+            background: #eef2ff;
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid #e0e7ff;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: #6b7280;
+            font-size: 15px;
+        }
+
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pagination button {
+            background: #4338ca;
+            color: #fff;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+        }
+
+        .pagination button:disabled {
+            background: #e5e7eb;
+            color: #9ca3af;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .pagination .page-info {
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="title">그날 무슨 일이?</div>
+    <p class="subtitle">구글 뉴스 헤드라인 RSS 를 기반으로 수집된 하루치 주요 뉴스를 한 눈에 보여줍니다.</p>
+    <div class="controls">
+        <button id="prevDay">◀ 어제</button>
+        <input type="date" id="selectedDate" />
+        <button id="nextDay">내일 ▶</button>
+    </div>
+</header>
+
+<section class="content">
+    <div id="cardContainer" class="card-grid"></div>
+    <div id="emptyState" class="empty-state" style="display:none;">해당 날짜에 저장된 뉴스가 없습니다.</div>
+    <div class="pagination" id="pagination" style="display:none;">
+        <button id="prevPage">이전 페이지</button>
+        <span class="page-info" id="pageInfo"></span>
+        <button id="nextPage">다음 페이지</button>
+    </div>
+</section>
+
+<script type="text/javascript">
+    // 화면에서 사용하는 기본 상태 값을 모아둔 객체. jQuery Ajax 결과에 따라 갱신한다.
+    const state = {
+        date: '',
+        page: 0,
+        size: 20,
+        totalCount: 0
+    };
+
+    // 날짜 입력 요소를 오늘 날짜(한국 시간대)로 초기화한다.
+    function initDate() {
+        const today = new Date();
+        const offsetDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000));
+        const isoDate = offsetDate.toISOString().slice(0, 10);
+        $('#selectedDate').val(isoDate);
+        state.date = isoDate;
+    }
+
+    // /api/archive/headlines 엔드포인트를 호출하여 지정한 날짜의 데이터를 가져온다.
+    function loadHeadlines(page = 0) {
+        state.page = page;
+        $.getJSON('/api/archive/headlines', {date: state.date, page: state.page, size: state.size})
+            .done(function (data) {
+                state.totalCount = data.totalCount;
+                renderCards(data.articles || []);
+                renderPagination();
+            })
+            .fail(function () {
+                $('#cardContainer').html('');
+                $('#emptyState').text('데이터를 불러오지 못했습니다. 서버 로그를 확인하세요.').show();
+            });
+    }
+
+    // 기사 리스트를 SNS 카드 형태로 렌더링한다.
+    function renderCards(articles) {
+        const container = $('#cardContainer');
+        container.empty();
+
+        if (!articles || articles.length === 0) {
+            $('#emptyState').show();
+            return;
+        }
+        $('#emptyState').hide();
+
+        articles.forEach(function (article) {
+            const card = $('<div class="card"></div>');
+            const header = $('<div class="card-header"></div>');
+            header.append($('<span></span>').text(article.pressName));
+            const timeText = article.pubDate ? article.pubDate.substring(11, 16) : '';
+            header.append($('<span></span>').text(timeText));
+
+            const title = $('<p class="card-title"></p>');
+            title.append($('<a target="_blank"></a>').attr('href', article.articleLink).text(article.articleTitle));
+
+            const footer = $('<div class="card-footer"></div>');
+            footer.append($('<span class="badge">헤드라인</span>')); 
+            footer.append($('<span class="badge">Google News</span>'));
+
+            card.append(header);
+            card.append(title);
+            card.append(footer);
+            container.append(card);
+        });
+    }
+
+    // 페이징 UI를 간단한 버튼/텍스트 형태로 표시한다.
+    function renderPagination() {
+        const totalPages = Math.ceil(state.totalCount / state.size);
+        if (totalPages <= 1) {
+            $('#pagination').hide();
+            return;
+        }
+        $('#pagination').show();
+        $('#pageInfo').text((state.page + 1) + ' / ' + totalPages);
+        $('#prevPage').prop('disabled', state.page <= 0);
+        $('#nextPage').prop('disabled', state.page >= totalPages - 1);
+    }
+
+    // 날짜 입력 필드 변경 시 호출.
+    $('#selectedDate').on('change', function () {
+        state.date = $(this).val();
+        loadHeadlines(0);
+    });
+
+    // 어제/내일 버튼 이벤트.
+    $('#prevDay').on('click', function () { shiftDate(-1); });
+    $('#nextDay').on('click', function () { shiftDate(1); });
+
+    function shiftDate(diff) {
+        const current = new Date($('#selectedDate').val());
+        current.setDate(current.getDate() + diff);
+        const offset = new Date(current.getTime() - (current.getTimezoneOffset() * 60000));
+        const iso = offset.toISOString().slice(0, 10);
+        $('#selectedDate').val(iso);
+        state.date = iso;
+        loadHeadlines(0);
+    }
+
+    // 페이징 버튼 이벤트.
+    $('#prevPage').on('click', function () { if (state.page > 0) loadHeadlines(state.page - 1); });
+    $('#nextPage').on('click', function () { const maxPage = Math.ceil(state.totalCount / state.size) - 1; if (state.page < maxPage) loadHeadlines(state.page + 1); });
+
+    // 초기화: 오늘 날짜로 설정 후 데이터 호출
+    $(document).ready(function () {
+        initDate();
+        loadHeadlines(0);
+    });
+</script>
+</body>
+</html>
