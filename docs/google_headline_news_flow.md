@@ -4,7 +4,7 @@
 
 ---
 ## 1) 전체 기능 개요
-1. **RSS 수집**: `GoogleHeadlineNewsService#fetchAndSaveGoogleHeadlineNews`가 5분마다 고정된 RSS URL을 호출합니다.
+1. **RSS 수집**: `GoogleHeadlineNewsService#fetchAndSaveGoogleHeadlineNews`가 5분마다(기본 fixed-delay 300,000ms) 고정된 RSS URL을 호출합니다.
 2. **파싱**: 각 `<item>`의 `<description>` 내부에 있는 `<ol><li>` 목록을 Jsoup 으로 분석하여 기사 제목/링크/언론사를 꺼냅니다.
 3. **DB 저장**: 파싱 결과를 `HeadlineNewsRepository`가 MariaDB 테이블 `HEADLINE_NEWS`에 저장합니다. (ARTICLE_LINK+PUB_DATE 조합이 이미 있으면 저장하지 않음)
 4. **REST API 제공**: `/api/archive/headlines` 엔드포인트가 날짜별로 저장된 기사를 JSON 으로 반환합니다.
@@ -59,7 +59,7 @@
 ---
 ## 4) 배치 스케줄러 흐름
 - 클래스/메서드: `GoogleHeadlineNewsService#fetchAndSaveGoogleHeadlineNews`
-- 주기: `@Scheduled(cron = "0 0/5 * * * *")` → 애플리케이션 시작 후 5분마다 실행.
+- 주기: `@Scheduled(fixedDelayString = "${news.collector.google.fixed-delay:300000}")` → 기본 5분 간격, 프로퍼티로 조정 가능.
 - 동작 순서:
   1. `news.collector.google.enabled` 값이 false 이면 로그만 남기고 종료.
   2. 고정 RSS URL(또는 프로퍼티에 지정된 URL)로 HTTP GET.

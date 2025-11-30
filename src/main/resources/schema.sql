@@ -1,10 +1,7 @@
--- 현재 버전에서는 외부 DB를 사용하지 않습니다.
--- SimpleNewsScheduler 가 메모리 Map 안에 샘플 기사를 담아두므로,
--- 스키마 정의가 필요 없다는 사실을 명시적으로 남겨둡니다.
--- (앞으로 DB로 확장할 때 이 파일을 다시 채우면 됩니다.)
-
 -- ===========================================
--- 구글 헤드라인 RSS 아카이브용 테이블 정의 (MariaDB)
+-- 구글 헤드라인 RSS 아카이브용 테이블 정의 (MariaDB 기준)
+-- 앱을 실행하기 전에 아래 DDL 을 MariaDB 에 그대로 실행하면 됩니다.
+-- ARTICLE_LINK + PUB_DATE 조합에 UNIQUE 제약을 걸어 중복 저장을 방지합니다.
 -- ===========================================
 CREATE TABLE IF NOT EXISTS HEADLINE_NEWS (
     ID BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

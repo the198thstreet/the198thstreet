@@ -19,9 +19,8 @@ import org.springframework.stereotype.Repository;
 /**
  * HEADLINE_NEWS 테이블에 접근하기 위한 단순 JdbcTemplate 기반 저장소.
  * <p>
- * - Map<String, Object> 구조만을 사용해 데이터를 전달한다.
- * - ARTICLE_LINK + PUB_DATE 조합이 이미 존재하는지 확인한 뒤, 없는 경우에만 insert 한다.
- * - 페이징 조회와 전체 건수 조회 역시 Map 기반으로 제공하여 초급 개발자도 흐름을 따라가기 쉽게 한다.
+ * 복잡한 JPA 엔티티를 쓰지 않고, 모든 입출력은 {@code Map<String, Object>}로 주고받는다.
+ * 기사 저장 전 중복을 확인하고, 날짜 범위 검색과 총 건수 조회도 모두 Map 기반으로 제공한다.
  */
 @Repository
 public class HeadlineNewsRepository {
@@ -36,7 +35,9 @@ public class HeadlineNewsRepository {
 
     /**
      * ARTICLE_LINK + PUB_DATE 조합이 이미 존재하는지 확인한다.
-     * 중복 저장을 방지하기 위해 insert 전에 항상 호출한다.
+     * <p>
+     * 입력: 기사 원문 링크, 기준 일시(LocalDateTime)
+     * 반환: 이미 저장된 데이터가 있으면 true, 없으면 false
      */
     public boolean existsByLinkAndPubDate(String articleLink, LocalDateTime pubDate) {
         String sql = "SELECT COUNT(1) FROM HEADLINE_NEWS WHERE ARTICLE_LINK = ? AND PUB_DATE = ?";
@@ -50,7 +51,13 @@ public class HeadlineNewsRepository {
 
     /**
      * 파싱된 기사 한 건을 HEADLINE_NEWS 테이블에 저장한다.
-     * Map 에 필요한 키가 빠지면 insert 가 실패하므로, 상위 서비스에서 유효성을 체크한 뒤 호출한다.
+     * <p>
+     * 기대하는 Map 키
+     * - pubDate      : LocalDateTime (NOT NULL)
+     * - pubDateRaw   : String (원문 pubDate)
+     * - articleTitle : String
+     * - articleLink  : String
+     * - pressName    : String
      */
     public void insertHeadline(Map<String, Object> article) {
         String sql = "INSERT INTO HEADLINE_NEWS (PUB_DATE, PUB_DATE_RAW, ARTICLE_TITLE, ARTICLE_LINK, PRESS_NAME) "
@@ -65,6 +72,8 @@ public class HeadlineNewsRepository {
 
     /**
      * 지정한 날짜(00:00:00~23:59:59) 범위에 포함되는 총 기사 건수를 구한다.
+     * <p>
+     * LocalDate 를 받으면 내부에서 해당 일자의 시작~끝 시각을 계산해 BETWEEN 조건을 만든다.
      */
     public int countByDate(LocalDate date) {
         LocalDateTime start = date.atStartOfDay();
@@ -76,7 +85,9 @@ public class HeadlineNewsRepository {
 
     /**
      * 지정한 날짜 범위의 기사를 페이징 조회한다.
-     * 반환되는 Map 은 컨트롤러에서 바로 JSON 변환하기 쉬운 구조로 구성한다.
+     * <p>
+     * 입력: 조회 기준 날짜, offset, size
+     * 반환: pubDate/pressName/articleTitle/articleLink 키를 가진 Map 리스트
      */
     public List<Map<String, Object>> findByDate(LocalDate date, int offset, int size) {
         LocalDateTime start = date.atStartOfDay();

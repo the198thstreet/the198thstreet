@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>그날 무슨 일이?</title>
+    <!-- jQuery: Ajax 호출과 DOM 조작을 단순하게 하기 위해 사용 -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYp4CkJPe3aKa5YfRS2XkLrO3I1I4td5qL2p3uBM=" crossorigin="anonymous"></script>
     <style>
+        /* ===== 전체 레이아웃 및 타이포그래피 설정 ===== */
         body {
             margin: 0;
             font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
@@ -12,6 +14,7 @@
             color: #1f2933;
         }
 
+        /* ===== 헤더 영역: 제목, 설명, 날짜 이동 버튼 ===== */
         header {
             background: linear-gradient(135deg, #4f46e5, #4338ca);
             color: #fff;
@@ -38,6 +41,7 @@
             flex-wrap: wrap;
         }
 
+        /* 날짜 이동 버튼 기본 스타일 */
         .controls button {
             background: #ffffff;
             border: none;
@@ -53,6 +57,7 @@
             background: #eef2ff;
         }
 
+        /* 날짜 선택 input 스타일 */
         .controls input[type="date"] {
             padding: 10px 12px;
             border-radius: 8px;
@@ -64,12 +69,14 @@
             padding: 24px;
         }
 
+        /* 기사 카드가 반복 배치되는 grid 컨테이너 */
         .card-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 16px;
         }
 
+        /* 실제 기사 카드를 감싸는 박스 스타일 */
         .card {
             background: #fff;
             border-radius: 14px;
@@ -81,6 +88,7 @@
             gap: 6px;
         }
 
+        /* 카드 상단: 언론사 이름 + 시각 */
         .card-header {
             display: flex;
             justify-content: space-between;
@@ -97,6 +105,7 @@
             line-height: 1.4;
         }
 
+        /* 기사 링크 기본/hover 스타일 */
         .card-title a {
             color: inherit;
             text-decoration: none;
@@ -106,6 +115,7 @@
             text-decoration: underline;
         }
 
+        /* 카드 하단: 간단한 배지 영역 */
         .card-footer {
             display: flex;
             gap: 6px;
@@ -129,6 +139,7 @@
             font-size: 15px;
         }
 
+        /* 페이지 이동 영역 */
         .pagination {
             margin-top: 20px;
             display: flex;
@@ -161,6 +172,7 @@
 </head>
 <body>
 <header>
+    <!-- 상단: 타이틀과 설명, 날짜 이동 컨트롤 -->
     <div class="title">그날 무슨 일이?</div>
     <p class="subtitle">구글 뉴스 헤드라인 RSS 를 기반으로 수집된 하루치 주요 뉴스를 한 눈에 보여줍니다.</p>
     <div class="controls">
@@ -171,6 +183,7 @@
 </header>
 
 <section class="content">
+    <!-- 기사 카드들이 렌더링될 영역과 빈 상태 메시지, 페이지 이동 UI -->
     <div id="cardContainer" class="card-grid"></div>
     <div id="emptyState" class="empty-state" style="display:none;">해당 날짜에 저장된 뉴스가 없습니다.</div>
     <div class="pagination" id="pagination" style="display:none;">
@@ -182,6 +195,9 @@
 
 <script type="text/javascript">
     // 화면에서 사용하는 기본 상태 값을 모아둔 객체. jQuery Ajax 결과에 따라 갱신한다.
+    // - date      : yyyy-MM-dd 형식 문자열 (초기값: 오늘)
+    // - page/size : REST API 요청에 그대로 전달
+    // - totalCount: 서버에서 받은 전체 건수 (페이징 계산에 사용)
     const state = {
         date: '',
         page: 0,
@@ -190,6 +206,7 @@
     };
 
     // 날짜 입력 요소를 오늘 날짜(한국 시간대)로 초기화한다.
+    // timezone offset 을 제거하여 yyyy-MM-dd 문자열을 안전하게 만든다.
     function initDate() {
         const today = new Date();
         const offsetDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000));
@@ -199,6 +216,7 @@
     }
 
     // /api/archive/headlines 엔드포인트를 호출하여 지정한 날짜의 데이터를 가져온다.
+    // 성공 시 카드 렌더링과 페이징 UI를 모두 갱신한다.
     function loadHeadlines(page = 0) {
         state.page = page;
         $.getJSON('/api/archive/headlines', {date: state.date, page: state.page, size: state.size})
@@ -214,6 +232,9 @@
     }
 
     // 기사 리스트를 SNS 카드 형태로 렌더링한다.
+    // - 언론사/발행시각을 카드 헤더에 표시
+    // - 제목을 클릭하면 새 탭에서 원문 기사 열기
+    // - "헤드라인", "Google News" 배지로 출처 표시
     function renderCards(articles) {
         const container = $('#cardContainer');
         container.empty();
@@ -246,6 +267,7 @@
     }
 
     // 페이징 UI를 간단한 버튼/텍스트 형태로 표시한다.
+    // totalCount와 size 로 전체 페이지 수를 계산한 뒤 버튼 활성/비활성 상태를 조절한다.
     function renderPagination() {
         const totalPages = Math.ceil(state.totalCount / state.size);
         if (totalPages <= 1) {
@@ -259,12 +281,14 @@
     }
 
     // 날짜 입력 필드 변경 시 호출.
+    // 입력된 날짜를 state.date 에 반영한 뒤 첫 페이지를 다시 불러온다.
     $('#selectedDate').on('change', function () {
         state.date = $(this).val();
         loadHeadlines(0);
     });
 
     // 어제/내일 버튼 이벤트.
+    // 현재 선택된 날짜를 기준으로 ±1일 이동해 API를 다시 호출한다.
     $('#prevDay').on('click', function () { shiftDate(-1); });
     $('#nextDay').on('click', function () { shiftDate(1); });
 
@@ -279,10 +303,12 @@
     }
 
     // 페이징 버튼 이벤트.
+    // prev/next 클릭 시 현재 페이지 값을 조정하고 API를 다시 호출한다.
     $('#prevPage').on('click', function () { if (state.page > 0) loadHeadlines(state.page - 1); });
     $('#nextPage').on('click', function () { const maxPage = Math.ceil(state.totalCount / state.size) - 1; if (state.page < maxPage) loadHeadlines(state.page + 1); });
 
     // 초기화: 오늘 날짜로 설정 후 데이터 호출
+    // document.ready 시점에 한 번만 실행한다.
     $(document).ready(function () {
         initDate();
         loadHeadlines(0);

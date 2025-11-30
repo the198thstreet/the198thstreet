@@ -21,8 +21,8 @@ import com.the198thstreet.news.google.repository.HeadlineNewsRepository;
 /**
  * 구글 헤드라인 아카이브 조회를 위한 REST API 컨트롤러.
  * <p>
- * /api/archive/headlines?date=yyyy-MM-dd&page=0&size=50 형태로 호출하면
- * 지정한 날짜의 기사 목록을 Map 기반 JSON 으로 돌려준다.
+ * URL 예시: {@code /api/archive/headlines?date=2025-11-30&page=0&size=50}
+ * 반환: 날짜/총건수/현재 페이지/페이지 사이즈/기사 목록을 담은 Map
  */
 @RestController
 @RequestMapping("/api/archive/headlines")
@@ -41,7 +41,11 @@ public class ArchiveHeadlineApiController {
 
     /**
      * 날짜별 헤드라인 목록을 페이징 조회한다.
-     * 날짜 파라미터가 없으면 오늘(Asia/Seoul 기준)을 사용한다.
+     * <p>
+     * @param date yyyy-MM-dd 형식 문자열 (없으면 오늘 날짜를 자동 사용)
+     * @param page 0 기반 페이지 번호
+     * @param size 페이지당 개수
+     * @return date/totalCount/page/size/articles 키를 가진 Map (JSON 으로 직렬화되어 응답)
      */
     @GetMapping
     public Map<String, Object> getHeadlines(
